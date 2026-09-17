@@ -445,7 +445,7 @@
   .calc-insert-row button{ flex:1; }
   .calc-target-label{ text-align:center; font-size:11px; color: var(--chalk-faint); margin-top:10px; letter-spacing:.03em; }
   .ex-modal .eyebrow{ font-size:11px; letter-spacing:.14em; color: var(--chalk-faint); text-transform:uppercase; text-align:center; margin-bottom:6px; }
-  .ex-modal-title{ text-align:center; font-family:'Oswald',sans-serif; font-size:38px; color: var(--chalk); margin-bottom: 10px; transform:translateY(-20%); }
+  .ex-modal-title{ text-align:center; font-family:'Oswald',sans-serif; font-size:19px; color: var(--chalk); margin-bottom: 10px; transform:translateY(-20%); }
 
   .ex-pr-badge{
     display:none; align-items:center; justify-content:center; gap:6px; align-self:center; margin-bottom:10px; width:max-content;
@@ -1406,6 +1406,10 @@ input,select,textarea{background-color:rgba(8,10,10,.72)!important;backdrop-filt
     <circle cx="16" cy="17" r="1" class="calc-dot"></circle>
   </svg>
 </button>
+    <div class="total-time-big" id="exModalTotalTime">
+      <span class="label-big">Total time</span>
+      <span class="clock-big mono" id="exModalFinishClock">00:00:00</span>
+    </div>
     <div class="ex-modal-title" id="exModalTitle">Exercise</div>
     <div class="eyebrow">Logging Sets</div>
     <div class="ex-pr-badge" id="exPrBadge"></div>
@@ -1460,15 +1464,7 @@ input,select,textarea{background-color:rgba(8,10,10,.72)!important;backdrop-filt
     </div>
     <button type="button" class="btn-primary" id="exFinishBtn">Finish Exercise</button>
     <div class="ex-modal-sticky-footer">
-      <div class="total-time-big" id="exModalTotalTime">
-        <span class="label-big">Total time</span>
-        <span class="clock-big mono" id="exModalFinishClock">00:00:00</span>
-      </div>
-      <div class="finish-actions workout-actions-row" id="exModalWorkoutActions">
-        <button type="button" class="btn-primary" id="startBtnExModal">Start</button>
-        <button type="button" class="mode-btn" id="modeBtnExModal"><span class="mode-dot"></span>Vibe</button>
-        <button type="button" class="btn-primary" id="finishBtnExModal">Finish workout</button>
-      </div>
+      <button type="button" class="btn-primary" id="startBtnExModal" style="width:100%;">Start</button>
     </div>
   </div>
 </div>
@@ -2998,7 +2994,6 @@ modeBtn.addEventListener('click', () => {
   buildColorWheel();
   themeModalOverlay.classList.add('show');
 });
-document.getElementById('modeBtnExModal').addEventListener('click', () => modeBtn.click());
 themeModalClose.addEventListener('click', () => themeModalOverlay.classList.remove('show'));
 themeModalOverlay.addEventListener('click', (e) => {
   if(e.target === themeModalOverlay) themeModalOverlay.classList.remove('show');
@@ -3082,7 +3077,6 @@ summaryModalOverlay.addEventListener('click', (e) => {
 /* ---------------------------------------------------------
    FINISH WORKOUT / CLEAR DAY
 --------------------------------------------------------- */
-document.getElementById('finishBtnExModal').addEventListener('click', () => document.getElementById('finishBtn').click());
 document.getElementById('finishBtn').addEventListener('click', async () => {
   if(exModalOverlay.classList.contains('show')) closeExerciseModal();
 
