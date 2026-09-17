@@ -362,7 +362,7 @@
     50%{ box-shadow: 0 0 95px rgba(var(--neon-rgb),0.7), 0 0 180px rgba(var(--neon-rgb),0.35); }
   }
   .ex-modal-close{
-    position:absolute; top:32px; right:0; transform:translateY(-50%); background:none; border:none; color: var(--neon-strong);
+    position:absolute; top:32px; right:0; transform:translate(-15%,-50%); background:none; border:none; color: var(--neon-strong);
     font-size:22px; line-height:1; cursor:pointer; z-index:6; text-shadow:0 0 8px rgba(var(--neon-rgb),.5);
   }
   .ex-modal-close:hover{ color: var(--danger); }
@@ -376,7 +376,7 @@
     background:linear-gradient(145deg,rgba(var(--neon-rgb),0.18),rgba(0,0,0,0.5));
     box-shadow:inset 0 0 0 1px rgba(255,255,255,0.035),inset 0 0 12px rgba(var(--neon-rgb),0.10),0 0 12px rgba(var(--neon-rgb),0.24);
     cursor:pointer;
-    transform:translate(-15%,-50%);
+    transform:translate(0%,-40%);
     transition:transform .15s ease,color .15s ease,border-color .15s ease,background .15s ease,box-shadow .15s ease;
     -webkit-tap-highlight-color:transparent;
   }
@@ -386,8 +386,8 @@
   .calc-open-btn .calc-screen{stroke:currentColor;fill:rgba(var(--neon-rgb),0.18);}
   .calc-open-btn .calc-keys{stroke:currentColor;}
   .calc-open-btn .calc-dot{fill:currentColor;stroke:none;}
-  .calc-open-btn:hover{color:var(--neon-strong);border-color:var(--neon);background:linear-gradient(145deg,rgba(var(--neon-rgb),0.27),rgba(0,0,0,0.38));box-shadow:inset 0 0 0 1px rgba(255,255,255,0.045),inset 0 0 15px rgba(var(--neon-rgb),0.14),0 0 18px rgba(var(--neon-rgb),0.48);transform:translate(-15%,calc(-50% - 1px)) scale(1.035);}
-  .calc-open-btn:active{transform:translate(-15%,-50%) scale(.95);box-shadow:inset 0 0 10px rgba(var(--neon-rgb),0.18),0 0 10px rgba(var(--neon-rgb),0.30);}
+  .calc-open-btn:hover{color:var(--neon-strong);border-color:var(--neon);background:linear-gradient(145deg,rgba(var(--neon-rgb),0.27),rgba(0,0,0,0.38));box-shadow:inset 0 0 0 1px rgba(255,255,255,0.045),inset 0 0 15px rgba(var(--neon-rgb),0.14),0 0 18px rgba(var(--neon-rgb),0.48);transform:translate(0%,calc(-40% - 1px)) scale(1.035);}
+  .calc-open-btn:active{transform:translate(0%,-40%) scale(.95);box-shadow:inset 0 0 10px rgba(var(--neon-rgb),0.18),0 0 10px rgba(var(--neon-rgb),0.30);}
 
   /* ---- Floating rest timer: compact clock only outside the exercise popup ---- */
    .global-rest-timer{position:fixed;right:16px;bottom:92px;z-index:125;display:none;width:72px;height:72px;padding:0;border:1px solid rgba(var(--neon-rgb),.9);border-radius:50%;background:rgba(8,10,10,.38);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);box-shadow:0 0 24px rgba(var(--neon-rgb),.28),inset 0 0 14px rgba(var(--neon-rgb),.08)}
