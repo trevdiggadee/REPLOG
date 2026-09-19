@@ -745,6 +745,16 @@
   .award-sub{ font-size:11px; color:var(--chalk-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   /* ---- Muscle Map ---- */
+  .mm-title{ color:#fff; font-size:15px; letter-spacing:.02em; }
+  #currentMuscleCard .profile-card-sub, #weeklyMuscleCard .profile-card-sub{ color:#fff; opacity:.75; }
+  #currentMuscleCard .mm-lbl, #weeklyMuscleCard .mm-lbl{ color:#fff; opacity:.7; }
+  #currentMuscleCard .mm-legend span, #weeklyMuscleCard .mm-legend span{ color:#fff; opacity:.75; }
+  #currentMuscleCard .mm-empty, #weeklyMuscleCard .mm-empty{ color:#fff; opacity:.75; }
+  #weeklyMuscleCard .mm-cov-name{ color:#fff; }
+  #weeklyMuscleCard .mm-cov-count{ color:#fff; }
+  #weeklyMuscleCard .mm-cov-day{ color:#fff; opacity:.65; }
+
+  /* ---- Muscle Map ---- */
   .mm-wrap{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:6px 0 2px; }
   .mm-col{ text-align:center; }
   .mm-col .mm-lbl{ font:700 9px 'Oswald',sans-serif; letter-spacing:.18em; text-transform:uppercase; color:var(--chalk-faint); margin-bottom:2px; }
@@ -1386,7 +1396,7 @@ input,select,textarea{background-color:rgba(8,10,10,.72)!important;backdrop-filt
     </div>
 
     <div class="profile-card wide" id="currentMuscleCard">
-      <h3 class="pr-title">Muscles Trained</h3>
+      <h3 class="mm-title">Muscles Trained</h3>
       <div class="profile-card-sub">What this workout is hitting — updates automatically as you add exercises.</div>
       <div class="mm-wrap">
         <div class="mm-col"><div class="mm-lbl">Front</div><svg id="mmCurFront" class="mm-body" viewBox="0 0 200 440"></svg></div>
@@ -1453,8 +1463,8 @@ input,select,textarea{background-color:rgba(8,10,10,.72)!important;backdrop-filt
           <div class="weekly-awards" id="weeklyAwards"></div>
         </div>
 
-        <div class="profile-card wide">
-          <h3 class="pr-title">Muscle Map</h3>
+        <div class="profile-card wide" id="weeklyMuscleCard">
+          <h3 class="mm-title">Muscle Map</h3>
           <div class="profile-card-sub">What you've actually trained this week, per day's current week — not what's planned.</div>
           <div id="mmCovList"></div>
           <div class="mm-wrap" style="margin-top:14px;">
