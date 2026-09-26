@@ -78,12 +78,14 @@
   .tagline{ color: #ffffff; font-size: 17px; font-weight:600; letter-spacing: 0.12em; text-transform: uppercase; text-align:center; margin-top: -4px; }
   .nav{ display:flex; align-items:center; gap:10px; margin-top: 4px; flex-wrap:wrap; justify-content:center; }
   .nav-block{
-    display:flex; align-items:stretch; border:1px solid var(--line); border-radius: 10px; overflow:hidden; background: var(--panel);
+    display:flex; align-items:stretch; border:1px solid var(--line); border-radius: 10px; background: var(--panel);
+    max-width:100%; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; scrollbar-width:none;
   }
+  .nav-block::-webkit-scrollbar{ display:none; }
   .nav-block button{
     background: transparent; border:none; border-right: 1px solid var(--line); color: var(--chalk-dim);
-    padding: 9px 18px; font: inherit; font-size: 14px; font-weight:700; cursor:pointer; white-space:nowrap;
-    transition: all .15s ease;
+    padding: 9px 13px; font: inherit; font-size: 13px; font-weight:700; cursor:pointer; white-space:nowrap;
+    flex: 0 0 auto; transition: all .15s ease;
   }
   .nav-block button:last-child{ border-right:none; }
   .nav-block button.active{ background: var(--neon); color: #171d02; box-shadow:none; }
@@ -93,6 +95,9 @@
   .nav-block #setupBtn.setup-locked{ color: var(--chalk-dim); }
   .nav-block #autoBuildBtn{ color: var(--neon-strong); }
   .nav-block #autoBuildBtn:hover{ background: rgba(var(--neon-rgb),0.08); color: var(--neon-strong); }
+  @media (max-width: 420px){
+    .nav-block button{ padding:8px 10px; font-size:12px; }
+  }
 
   .next-block-banner{
     display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
@@ -1345,8 +1350,8 @@ input,select,textarea{background-color:rgba(8,10,10,.72)!important;backdrop-filt
       <button id="navBuild" class="active">Build</button>
       <button id="navLog">Logbook</button>
       <button id="navProfile">Profile</button>
-      <button id="setupBtn">Complete Day Setup</button>
-      <button id="autoBuildBtn" title="Fill this day's empty slots from RepLog's exercise library">⚡ Auto-Build</button>
+      <button id="setupBtn">Setup</button>
+      <button id="autoBuildBtn" title="Fill this day's empty slots from RepLog's exercise library">⚡ Build</button>
       <button class="start-btn" id="startBtn">Start</button>
     </div>
     <div class="session-active" id="sessionActive">
@@ -2505,18 +2510,41 @@ function nextWeightSuggestion(weight){
   if(weight >= 95) return weight + 5;
   return weight + 2.5;
 }
+// Same-muscle-group rotation: reuses the existing upper/lower/cardio library
+// taxonomy (the same groups the "— Select exercise —" dropdown is built
+// from) to find a different exercise that trains the same muscles.
+const SIDE_LIBRARY = { upper: UPPER_LIBRARY, lower: LOWER_LIBRARY, cardio: CARDIO_LIBRARY };
+function findLibraryGroup(side, name){
+  const lib = SIDE_LIBRARY[side];
+  if(!lib) return null;
+  for(const group in lib){ if(lib[group].includes(name)) return lib[group]; }
+  return null;
+}
+function pickAlternateExercise(side, currentName){
+  const group = findLibraryGroup(side, currentName);
+  if(!group) return null;
+  const candidates = group.filter(n => n !== currentName);
+  if(!candidates.length) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
 function suggestionLabel(slot){
-  if(slot.suggestedWeight != null) return `Try ${slot.suggestedWeight} lb (was ${slot.suggestedFrom})`;
-  if(slot.suggestedReps != null) return `Try ${slot.suggestedReps} reps (was ${slot.suggestedFrom})`;
+  const prevEx = slot.suggestedFromExercise ? ` on ${slot.suggestedFromExercise}` : '';
+  if(slot.suggestedWeight != null) return `Try ${slot.suggestedWeight} lb (was ${slot.suggestedFrom}${prevEx})`;
+  if(slot.suggestedReps != null) return `Try ${slot.suggestedReps} reps (was ${slot.suggestedFrom}${prevEx})`;
   return '';
 }
 function buildNextBlock(dayIndex){
   const d = days[dayIndex];
   if(!d) return;
+  let swapped = 0;
   ['upper','lower','cardio'].forEach(side => {
     d[side].forEach((slot,i) => {
-      if(!slot.exercise){ slot.suggestedWeight=null; slot.suggestedReps=null; slot.suggestedFrom=null; return; }
+      if(!slot.exercise){ slot.suggestedWeight=null; slot.suggestedReps=null; slot.suggestedFrom=null; slot.suggestedFromExercise=null; return; }
       const perf = slotTopPerformance(d, side, i, WEEK_COUNT-1);
+      const oldName = slot.exercise;
+      const alt = pickAlternateExercise(side, oldName);
+      if(alt){ slot.exercise = alt; slot.custom = false; swapped++; }
+      slot.suggestedFromExercise = alt ? oldName : null;
       if(!perf){ slot.suggestedWeight=null; slot.suggestedReps=null; slot.suggestedFrom=null; return; }
       if(perf.bodyweight){
         slot.suggestedReps = perf.reps + 1;
@@ -2533,7 +2561,7 @@ function buildNextBlock(dayIndex){
   d.currentWeek = 1;
   d.blockNumber = (d.blockNumber || 1) + 1;
   saveDays(); renderAll(); renderDayRail();
-  showToast(`Block ${d.blockNumber} built for Day ${dayIndex+1} — targets progressed from Week 4.`, 6000);
+  showToast(`Block ${d.blockNumber} built for Day ${dayIndex+1} — ${swapped} exercise${swapped===1?'':'s'} rotated, targets progressed from Week 4.`, 6000);
 }
 function renderNextBlockBanner(){
   const d = days[activeDay];
@@ -2545,7 +2573,7 @@ function renderNextBlockBanner(){
 }
 document.getElementById('nextBlockBtn').addEventListener('click', () => {
   const d = days[activeDay];
-  if(confirm(`Build Block ${(d.blockNumber||1)+1} for Day ${activeDay+1}? This resets its 4-week log and suggests new weights from Week 4.`)){
+  if(confirm(`Build Block ${(d.blockNumber||1)+1} for Day ${activeDay+1}? This resets its 4-week log, rotates in different exercises for the same muscle groups, and suggests new targets from Week 4.`)){
     buildNextBlock(activeDay);
   }
 });
@@ -2614,10 +2642,10 @@ function renderSetupBar(){
   const d = days[activeDay];
   const btn = document.getElementById('setupBtn');
   if(d.setupComplete){
-    btn.textContent = "Edit exercises";
+    btn.textContent = "Edit";
     btn.classList.add('setup-locked');
   } else {
-    btn.textContent = "Complete Day Setup";
+    btn.textContent = "Setup";
     btn.classList.remove('setup-locked');
   }
 }
