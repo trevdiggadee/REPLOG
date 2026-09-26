@@ -91,6 +91,20 @@
   .nav-block #setupBtn{ color: var(--neon); }
   .nav-block #setupBtn:hover{ background: rgba(var(--neon-rgb),0.08); color: var(--neon); }
   .nav-block #setupBtn.setup-locked{ color: var(--chalk-dim); }
+  .nav-block #autoBuildBtn{ color: var(--neon-strong); }
+  .nav-block #autoBuildBtn:hover{ background: rgba(var(--neon-rgb),0.08); color: var(--neon-strong); }
+
+  .next-block-banner{
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    background: linear-gradient(135deg, rgba(var(--neon-rgb),.14), rgba(19,20,23,.7));
+    border:1px solid var(--neon); border-radius: var(--radius); padding:12px 16px; margin: 0 0 16px;
+  }
+  .next-block-banner span{ font-size:13.5px; color: var(--chalk); font-weight:600; }
+  .next-block-banner button{
+    background: var(--neon); color:#12150a; border:none; border-radius: 100px; padding:8px 16px;
+    font: inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;
+  }
+  .next-block-banner button:hover{ background: var(--neon-strong); }
 
   .start-btn{
     display:inline-flex; align-items:center; justify-content:center;
@@ -1332,6 +1346,7 @@ input,select,textarea{background-color:rgba(8,10,10,.72)!important;backdrop-filt
       <button id="navLog">Logbook</button>
       <button id="navProfile">Profile</button>
       <button id="setupBtn">Complete Day Setup</button>
+      <button id="autoBuildBtn" title="Fill this day's empty slots from RepLog's exercise library">⚡ Auto-Build</button>
       <button class="start-btn" id="startBtn">Start</button>
     </div>
     <div class="session-active" id="sessionActive">
@@ -1349,6 +1364,11 @@ input,select,textarea{background-color:rgba(8,10,10,.72)!important;backdrop-filt
     <div class="day-rail" id="dayRail"></div>
 
     <div class="week-rail" id="weekRail"></div>
+
+    <div class="next-block-banner" id="nextBlockBanner" style="display:none;">
+      <span id="nextBlockText"></span>
+      <button id="nextBlockBtn">Build Next Block →</button>
+    </div>
 
     <div class="day-header" aria-label="Workout details">
       <div class="field meta-field" data-editor="wTitle" tabindex="0" role="button" aria-label="Edit workout title">
@@ -1740,6 +1760,52 @@ function buildOptions(library){
 const UPPER_OPTIONS_HTML = buildOptions(UPPER_LIBRARY);
 const LOWER_OPTIONS_HTML = buildOptions(LOWER_LIBRARY);
 const CARDIO_OPTIONS_HTML = buildOptions(CARDIO_LIBRARY);
+
+/* ---------------------------------------------------------
+   AUTO-BUILD — fills a day's empty slots with a sensible,
+   exhaustive split, using only exercise names that already
+   exist in the libraries above (so the muscle map and every
+   other lookup keeps working with no extra mapping needed).
+   Day 1-4 map to Push / Pull / Legs / Full Body, matching
+   RepLog's fixed 4-day-per-week structure.
+--------------------------------------------------------- */
+const AUTO_BUILD_PLAN = [
+  { title:'Push Day', type:'Push',
+    upper:['Barbell Bench Press','Overhead Barbell Press','Incline Dumbbell Press','Dumbbell Lateral Raise','Tricep Pushdown (Rope)'],
+    lower:[], cardio:['Stationary Bike'] },
+  { title:'Pull Day', type:'Pull',
+    upper:['Barbell Bent-Over Row','Pull-Up','Seated Cable Row','Face Pull','Barbell Curl'],
+    lower:[], cardio:['Rowing Machine'] },
+  { title:'Leg Day', type:'Legs',
+    upper:[], lower:['Back Squat','Romanian Deadlift','Bulgarian Split Squat','Hip Thrust','Standing Calf Raise'],
+    cardio:['Stair Climber'] },
+  { title:'Full Body', type:'Full Body',
+    upper:['Dumbbell Bench Press','Seated Dumbbell Shoulder Press'],
+    lower:['Walking Lunge','Leg Press'],
+    cardio:['Interval Run','Jump Rope'] },
+];
+
+function autoBuildDay(i){
+  const d = days[i];
+  if(!d) return;
+  const plan = AUTO_BUILD_PLAN[i % AUTO_BUILD_PLAN.length];
+  let filled = 0;
+  ['upper','lower','cardio'].forEach(side => {
+    let p = 0;
+    d[side].forEach(slot => {
+      if(slot.exercise) return;
+      const name = plan[side][p];
+      if(!name) return;
+      slot.exercise = name; slot.custom = false; slot.sets = slot.sets || '3';
+      p++; filled++;
+    });
+  });
+  if(!d.title) d.title = plan.title;
+  if(!d.type) d.type = plan.type;
+  saveDays(); renderAll(); renderDayRail();
+  showToast(filled ? `Auto-built ${plan.title} — ${filled} exercise${filled===1?'':'s'} added.` : 'This day is already fully built.');
+}
+
 const CLOCK_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.2 2"></path></svg>`;
 
 /* ---------------------------------------------------------
@@ -2023,6 +2089,7 @@ function emptyDay(){
     cardio: Array.from({length:SLOTS_PER_SIDE}, emptySlotDef),
     weeks: Array.from({length:WEEK_COUNT}, emptyWeek),
     currentWeek: 1,
+    blockNumber: 1,
     setupComplete: false,
     timerStart: null,
     timerElapsed: 0
@@ -2406,6 +2473,84 @@ function renderWeekRail(){
 }
 
 /* ---------------------------------------------------------
+   PROGRESSION — build the next 4-week block from Week 4's logs.
+   RepLog is a fixed 4-week app: once a day's Week 4 has logged
+   sets, this reads the heaviest weight (or, for bodyweight-only
+   logs, the most reps) hit per slot, suggests a bumped target,
+   and resets that day to a fresh Week 1-4 block carrying the
+   same exercise list forward — building off last block, not
+   starting from zero.
+--------------------------------------------------------- */
+function slotTopPerformance(day, side, index, weekIdx){
+  const log = day.weeks[weekIdx] && day.weeks[weekIdx].logs[side][index];
+  if(!Array.isArray(log) || !log.length) return null;
+  let topWeight = null, topReps = null, allBw = true;
+  log.forEach(r => {
+    if(!r || r.reps === "" || r.reps == null) return;
+    const reps = parseFloat(r.reps) || 0;
+    const isBw = String(r.weight).toUpperCase() === 'BW';
+    if(!isBw){
+      allBw = false;
+      const w = parseFloat(r.weight) || 0;
+      if(topWeight === null || w > topWeight){ topWeight = w; topReps = reps; }
+    } else if(topReps === null || reps > topReps){
+      topReps = reps;
+    }
+  });
+  if(allBw) return topReps != null ? { bodyweight:true, reps:topReps } : null;
+  return topWeight != null ? { bodyweight:false, weight:topWeight, reps:topReps } : null;
+}
+function nextWeightSuggestion(weight){
+  if(weight >= 225) return weight + 10;
+  if(weight >= 95) return weight + 5;
+  return weight + 2.5;
+}
+function suggestionLabel(slot){
+  if(slot.suggestedWeight != null) return `Try ${slot.suggestedWeight} lb (was ${slot.suggestedFrom})`;
+  if(slot.suggestedReps != null) return `Try ${slot.suggestedReps} reps (was ${slot.suggestedFrom})`;
+  return '';
+}
+function buildNextBlock(dayIndex){
+  const d = days[dayIndex];
+  if(!d) return;
+  ['upper','lower','cardio'].forEach(side => {
+    d[side].forEach((slot,i) => {
+      if(!slot.exercise){ slot.suggestedWeight=null; slot.suggestedReps=null; slot.suggestedFrom=null; return; }
+      const perf = slotTopPerformance(d, side, i, WEEK_COUNT-1);
+      if(!perf){ slot.suggestedWeight=null; slot.suggestedReps=null; slot.suggestedFrom=null; return; }
+      if(perf.bodyweight){
+        slot.suggestedReps = perf.reps + 1;
+        slot.suggestedFrom = perf.reps;
+        slot.suggestedWeight = null;
+      } else {
+        slot.suggestedWeight = nextWeightSuggestion(perf.weight);
+        slot.suggestedFrom = perf.weight;
+        slot.suggestedReps = null;
+      }
+    });
+  });
+  d.weeks = Array.from({length:WEEK_COUNT}, emptyWeek);
+  d.currentWeek = 1;
+  d.blockNumber = (d.blockNumber || 1) + 1;
+  saveDays(); renderAll(); renderDayRail();
+  showToast(`Block ${d.blockNumber} built for Day ${dayIndex+1} — targets progressed from Week 4.`, 6000);
+}
+function renderNextBlockBanner(){
+  const d = days[activeDay];
+  const banner = document.getElementById('nextBlockBanner');
+  if(!d || !banner) return;
+  const show = weekHasContent(d, WEEK_COUNT-1);
+  banner.style.display = show ? 'flex' : 'none';
+  if(show) document.getElementById('nextBlockText').textContent = `Week ${WEEK_COUNT} logged for Day ${activeDay+1} — ready for Block ${(d.blockNumber||1)+1}?`;
+}
+document.getElementById('nextBlockBtn').addEventListener('click', () => {
+  const d = days[activeDay];
+  if(confirm(`Build Block ${(d.blockNumber||1)+1} for Day ${activeDay+1}? This resets its 4-week log and suggests new weights from Week 4.`)){
+    buildNextBlock(activeDay);
+  }
+});
+
+/* ---------------------------------------------------------
    RENDER: HEADER FIELDS
 --------------------------------------------------------- */
 const wTitle = document.getElementById('wTitle');
@@ -2490,6 +2635,7 @@ document.getElementById('setupBtn').addEventListener('click', () => {
     showToast("Day setup complete — exercise list is now locked for all 4 weeks.");
   }
 });
+document.getElementById('autoBuildBtn').addEventListener('click', () => autoBuildDay(activeDay));
 
 /* ---------------------------------------------------------
    RENDER: SLOTS
@@ -2593,13 +2739,14 @@ function buildSlotCompactEl(side, index, slot){
   const cw = d.currentWeek;
   const currentLog = d.weeks[cw-1].logs[side][index] || [];
   const done = currentLog.length > 0 && currentLog.every(r => r.reps !== "" && r.reps != null);
+  const summaryText = currentLog.length ? formatLogSummary(currentLog) : suggestionLabel(slot);
 
   const wrap = document.createElement('div');
   wrap.className = `slot-compact ${side}` + (done ? ' done' : '');
   wrap.innerHTML = `
     <span class="sc-dot"></span>
     <span class="sc-name">${escapeHtml(slot.exercise || 'Exercise')}</span>
-    <span class="sc-summary mono">${escapeHtml(formatLogSummary(currentLog))}</span>
+    <span class="sc-summary mono">${escapeHtml(summaryText)}</span>
     <span class="sc-chev">›</span>
   `;
   wrap.addEventListener('click', () => openExerciseModal(side, index));
@@ -3030,7 +3177,7 @@ function openExerciseModal(side, index){
   }
   exModalCelebrated = false;
   exModalPrevLog = cw > 1 ? (d.weeks[cw-2].logs[side][index] || []) : [];
-  renderExPrevRow(cw, exModalPrevLog);
+  renderExPrevRow(cw, exModalPrevLog, slot);
 
   exModalTitle.textContent = slot.exercise || 'Exercise';
   if(exBwToggle){
@@ -3047,11 +3194,18 @@ function currentExSlot(){
   return d && exModalSide != null && exModalIndex != null ? d[exModalSide][exModalIndex] : null;
 }
 
-function renderExPrevRow(cw, prevLog){
+function renderExPrevRow(cw, prevLog, slot){
   const prevRowEl = document.getElementById('exPrevRow');
   const prevDataEl = document.getElementById('exPrevData');
   if(cw <= 1){
-    prevRowEl.style.display = 'none';
+    const label = slot ? suggestionLabel(slot) : '';
+    if(label){
+      prevRowEl.style.display = 'flex';
+      prevDataEl.textContent = label;
+      prevRowEl.classList.remove('empty');
+    } else {
+      prevRowEl.style.display = 'none';
+    }
     return;
   }
   prevRowEl.style.display = 'flex';
@@ -4000,6 +4154,7 @@ function switchView(v){
 function renderAll(){
   renderDayRail();
   renderWeekRail();
+  renderNextBlockBanner();
   renderHeader();
   renderSetupBar();
   renderSlots();
