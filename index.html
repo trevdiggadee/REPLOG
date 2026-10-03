@@ -1354,6 +1354,10 @@ input,select,textarea{background-color:rgba(8,10,10,.72)!important;}
 *,*::before,*::after{animation-iteration-count:1 !important;will-change:auto !important}
 .analog-clock.urgent{animation-iteration-count:infinite !important}
 </style>
+<style id="replogV12Styles">
+.add-slot-btn{display:block;width:100%;margin:10px 0 4px;padding:13px 14px;background:transparent;border:1.5px dashed rgba(var(--neon-rgb),.55);border-radius:var(--radius);color:var(--neon-strong);font:inherit;font-size:14px;font-weight:700;letter-spacing:.02em;cursor:pointer}
+.add-slot-btn:active{background:rgba(var(--neon-rgb),.08)}
+</style>
 </head>
 <body>
 
@@ -2257,6 +2261,7 @@ const MM_BACK_SVG = `
 --------------------------------------------------------- */
 const DAY_COUNT = 4;
 const SLOTS_PER_SIDE = 5;
+const MAX_SLOTS_PER_SIDE = 10;
 const WEEK_COUNT = 4;
 let currentUserId = null;
 let currentUser = null;
@@ -2287,6 +2292,14 @@ function emptyDay(){
   };
 }
 function freshDays(){ return Array.from({length:DAY_COUNT}, emptyDay); }
+// A fresh 4-week log sized to however many exercise slots the day currently has.
+function freshWeeksFor(d){
+  return Array.from({length:WEEK_COUNT}, () => {
+    const w = emptyWeek();
+    ['upper','lower','cardio'].forEach(sd => { while(w.logs[sd].length < d[sd].length) w.logs[sd].push([]); });
+    return w;
+  });
+}
 function isValidDaysShape(parsed){
   return Array.isArray(parsed) && parsed.length && parsed[0].weeks && parsed[0].weeks[0] && parsed[0].weeks[0].logs;
 }
@@ -2294,9 +2307,19 @@ function normalizeDaysLength(parsed){
   const normalized = parsed.length > DAY_COUNT ? parsed.slice(0, DAY_COUNT) : parsed.length < DAY_COUNT ? parsed.concat(Array.from({length: DAY_COUNT - parsed.length}, emptyDay)) : parsed;
   normalized.forEach(d=>{
     if(!Array.isArray(d.cardio)) d.cardio=Array.from({length:SLOTS_PER_SIDE}, emptySlotDef);
-    d.cardio = d.cardio.slice(0,SLOTS_PER_SIDE).concat(Array.from({length:Math.max(0,SLOTS_PER_SIDE-d.cardio.length)}, emptySlotDef));
+    // Never cut slots down (users can add extra ones); only pad up to the minimum.
+    ['upper','lower','cardio'].forEach(sd=>{
+      if(!Array.isArray(d[sd])) d[sd]=[];
+      while(d[sd].length < SLOTS_PER_SIDE) d[sd].push(emptySlotDef());
+    });
     if(!Array.isArray(d.weeks)) d.weeks=Array.from({length:WEEK_COUNT}, emptyWeek);
-    d.weeks.forEach(w=>{ if(!w.logs) w.logs={}; if(!Array.isArray(w.logs.cardio)) w.logs.cardio=Array.from({length:SLOTS_PER_SIDE},()=>[]); });
+    d.weeks.forEach(w=>{
+      if(!w.logs) w.logs={};
+      ['upper','lower','cardio'].forEach(sd=>{
+        if(!Array.isArray(w.logs[sd])) w.logs[sd]=[];
+        while(w.logs[sd].length < d[sd].length) w.logs[sd].push([]);
+      });
+    });
   });
   return normalized;
 }
@@ -2913,7 +2936,7 @@ function buildNextBlock(dayIndex, plan){
       }
     });
   });
-  d.weeks = Array.from({length:WEEK_COUNT}, emptyWeek);
+  d.weeks = freshWeeksFor(d);
   d.currentWeek = 1;
   d.blockNumber = (d.blockNumber || 1) + 1;
   saveDays(); renderAll(); renderDayRail();
@@ -3017,6 +3040,7 @@ document.getElementById('setupBtn').addEventListener('click', () => {
   } else {
     const anyChosen = [...d.upper, ...d.lower, ...d.cardio].some(s => s.exercise);
     if(!anyChosen){ showToast("Choose at least one exercise before completing setup."); return; }
+    trimUnusedExtraSlots(d);
     d.setupComplete = true;
     saveDays(); renderAll();
     showToast("Day setup complete — exercise list is now locked for all 4 weeks.");
@@ -3044,6 +3068,18 @@ function renderSlots(){
   upperEntries.forEach(o => upperSlotsEl.appendChild(d.setupComplete ? buildSlotCompactEl('upper', o.i, o.slot) : buildSlotEl('upper', o.i, o.slot)));
   lowerEntries.forEach(o => lowerSlotsEl.appendChild(d.setupComplete ? buildSlotCompactEl('lower', o.i, o.slot) : buildSlotEl('lower', o.i, o.slot)));
   cardioEntries.forEach(o => cardioSlotsEl.appendChild(d.setupComplete ? buildSlotCompactEl('cardio', o.i, o.slot) : buildSlotEl('cardio', o.i, o.slot)));
+
+  if(!d.setupComplete){
+    [['upper',upperSlotsEl],['lower',lowerSlotsEl],['cardio',cardioSlotsEl]].forEach(([side, el]) => {
+      if(d[side].every(sl => sl.exercise) && d[side].length < MAX_SLOTS_PER_SIDE){
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'add-slot-btn';
+        b.textContent = '+ Add exercise';
+        b.addEventListener('click', () => addSlotToSide(side));
+        el.appendChild(b);
+      }
+    });
+  }
 
   const hideUpper = d.setupComplete && upperEntries.length === 0;
   const hideLower = d.setupComplete && lowerEntries.length === 0;
@@ -3155,14 +3191,39 @@ function buildSlotCompactEl(side, index, slot){
   return wrap;
 }
 
+function addSlotToSide(side){
+  const d = days[activeDay];
+  if(!d || !d[side] || d[side].length >= MAX_SLOTS_PER_SIDE){ showToast(`Max ${MAX_SLOTS_PER_SIDE} exercises per section.`); return; }
+  d[side].push(emptySlotDef());
+  d.weeks.forEach(w => { if(!w.logs) w.logs = {}; if(!Array.isArray(w.logs[side])) w.logs[side] = []; while(w.logs[side].length < d[side].length) w.logs[side].push([]); });
+  saveDays(); renderAll();
+  requestAnimationFrame(() => {
+    const els = document.querySelectorAll(`#${side}Slots .slot`);
+    const last = els[els.length - 1];
+    if(last && last.scrollIntoView) last.scrollIntoView({ behavior:'smooth', block:'center' });
+  });
+}
+// When locking the day, drop trailing extra slots that were added but never used.
+function trimUnusedExtraSlots(d){
+  ['upper','lower','cardio'].forEach(side => {
+    while(d[side].length > SLOTS_PER_SIDE){
+      const i = d[side].length - 1;
+      const used = d[side][i].exercise || d.weeks.some(w => w.logs && w.logs[side] && (w.logs[side][i] || []).length);
+      if(used) break;
+      d[side].pop();
+      d.weeks.forEach(w => { if(w.logs && Array.isArray(w.logs[side]) && w.logs[side].length > d[side].length) w.logs[side].length = d[side].length; });
+    }
+  });
+}
 function updateCounts(){
   const d = days[activeDay];
   const upperFilled = d.upper.filter(s => s.exercise).length;
   const lowerFilled = d.lower.filter(s => s.exercise).length;
-  document.getElementById('upperCount').textContent = `${upperFilled} / 5 logged`;
-  document.getElementById('lowerCount').textContent = `${lowerFilled} / 5 logged`;
+  const tot = side => Math.max(SLOTS_PER_SIDE, d[side].length);
+  document.getElementById('upperCount').textContent = `${upperFilled} / ${tot('upper')} logged`;
+  document.getElementById('lowerCount').textContent = `${lowerFilled} / ${tot('lower')} logged`;
   const cardioFilled = d.cardio.filter(s => s.exercise).length;
-  document.getElementById('cardioCount').textContent = `${cardioFilled} / 5 logged`;
+  document.getElementById('cardioCount').textContent = `${cardioFilled} / ${tot('cardio')} logged`;
   renderCurrentMuscleMap();
 }
 
@@ -4254,7 +4315,7 @@ function openSummaryModal(data){
 document.getElementById('newProgramBtn').addEventListener('click', () => {
   if(summaryBlockCompleteDayIndex == null) return;
   const d = days[summaryBlockCompleteDayIndex];
-  d.weeks = Array.from({length:WEEK_COUNT}, emptyWeek);
+  d.weeks = freshWeeksFor(d);
   d.currentWeek = 1;
   d.blockNumber = (d.blockNumber || 1) + 1;
   d.setupComplete = false;
